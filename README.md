@@ -49,6 +49,7 @@ Thank you for that work.
 * Added TypeScript typings for all push events
 * Push connection: messages bigger than one HTTP/2 data chunk (e.g. PUSH_AUDIO_PLAYER_STATE, NotifyNowPlayingUpdated) were dropped, the stream is now buffered and parsed per multipart part, also keeping multi-byte characters intact
 * Push connection: messages without renderingUpdates and broken updates are now emitted as "ws-unknown-message" instead of only being logged, one broken update no longer drops the other updates of the same message, and parse errors are emitted as new "ws-unexpected-response" event
+* Added amazon.com.br and pt-BR support: locale (Accept-Language, sequences, announcements, music, Audible, skills, login proxy language) is now derived from amazonPage or the new "locale" option instead of always "de-DE"
 
 ### 8.1.1 (2026-08-15)
 * (GiacomoCa) Alexa-Cookie fixes for 2FA and redirects during Logins

@@ -17,6 +17,9 @@ declare module "alexa-remote2" {
         deviceAppName: string;
         acceptLanguage: string;
         amazonPage: string;
+        /** Locale like "pt-BR"; defaults to the locale of amazonPage (e.g. "pt-BR" for "amazon.com.br") */
+        locale: string;
+        amazonPageProxyLanguage: string;
         /** @deprecated */
         useWsMqtt: boolean;
         usePushConnection: boolean;
@@ -493,6 +496,8 @@ declare module "alexa-remote2" {
         ): void;
 
         /// Public
+        getLocale(): string;
+
         checkAuthentication(callback: CallbackWithErrorAndBody): void;
 
         getUsersMe(callback: CallbackWithErrorAndBody): void;
