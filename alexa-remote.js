@@ -130,6 +130,7 @@ class AlexaRemote extends EventEmitter {
         this.lastVolumes = {};
         this.lastEqualizer = {};
         this.lastPushedActivity = {};
+        this.lastAudioPlayerMedia = {};
 
         this.activityUpdateQueue = [];
         this.activityUpdateNotFoundCounter = 0;
@@ -640,12 +641,20 @@ class AlexaRemote extends EventEmitter {
                         'errorMessage': null
                     }
                     */
+                    if (payload.mediaReferenceId) {
+                        // Remembered to find the device of NotifyNowPlayingUpdated, which has no device information
+                        this.lastAudioPlayerMedia[payload.dopplerId.deviceSerialNumber] = {
+                            deviceType: payload.dopplerId.deviceType,
+                            mediaReferenceId: payload.mediaReferenceId
+                        };
+                    }
                     this.emit('ws-audio-player-state-change', {
                         destinationUserId: payload.destinationUserId,
                         deviceSerialNumber: payload.dopplerId.deviceSerialNumber,
                         deviceType: payload.dopplerId.deviceType,
                         mediaReferenceId: payload.mediaReferenceId,
                         audioPlayerState: payload.audioPlayerState, //  'INTERRUPTED', / 'FINISHED' / 'PLAYING'
+                        quality: payload.quality === undefined ? null : payload.quality,
                         error: payload.error,
                         errorMessage: payload.errorMessage
                     });
@@ -905,7 +914,7 @@ class AlexaRemote extends EventEmitter {
                     });
                     return;
 
-                case 'NotifyNowPlayingUpdated': 
+                case 'NotifyNowPlayingUpdated':
                 /*
                 {
                     "customerId": "xxxxxxxxxxxxxx",
@@ -974,17 +983,22 @@ class AlexaRemote extends EventEmitter {
                         }
                     }
                     */
-                   const nowPlaying = payload?.update?.update?.nowPlayingData ?? null;
-                   
-                   this.emit('ws-now-playing-updated', {
-                        customerId: payload?.customerId ?? null,
-                        taskSessionId: payload?.update?.taskSessionId ?? null,
-                        cause: payload?.update?.update?.cause ?? null,
-                        mediaId: nowPlaying?.mediaId ?? null,
-                        playerState: nowPlaying?.playerState ?? null,
-                        nowPlayingData: nowPlaying
-                    });
-                    return; 
+                    {
+                        const nowPlaying = payload?.update?.update?.nowPlayingData ?? null;
+                        const device = this.findDeviceByMediaId(nowPlaying?.mediaId);
+
+                        this.emit('ws-now-playing-updated', {
+                            customerId: payload?.customerId ?? null,
+                            deviceSerialNumber: device ? device.deviceSerialNumber : null,
+                            deviceType: device ? device.deviceType : null,
+                            taskSessionId: payload?.update?.taskSessionId ?? null,
+                            cause: payload?.update?.update?.cause ?? null,
+                            mediaId: nowPlaying?.mediaId ?? null,
+                            playerState: nowPlaying?.playerState ?? null,
+                            nowPlayingData: nowPlaying
+                        });
+                    }
+                    return;
                 case 'PUSH_MICROPHONE_STATE':
                 case 'PUSH_DELETE_DOPPLER_ACTIVITIES':
                 case 'PUSH_DEVICE_SETUP_STATE_CHANGE':
@@ -997,6 +1011,25 @@ class AlexaRemote extends EventEmitter {
         });
 
         this.alexahttp2Push.connect();
+    }
+
+    /**
+     * NotifyNowPlayingUpdated carries no device information. Its mediaId (e.g. "spotify:track:2dhV...")
+     * is the end of the mediaReferenceId of the PUSH_AUDIO_PLAYER_STATE that arrives shortly before
+     * (e.g. "EMP_ALEXA-<uuid>:spotify:track:2dhV..."). Returns the device only when exactly one
+     * device matches, so a track playing on several devices is not attributed to a wrong one.
+     */
+    findDeviceByMediaId(mediaId) {
+        if (!mediaId || typeof mediaId !== 'string') return null;
+        const matches = Object.keys(this.lastAudioPlayerMedia).filter(serial => {
+            const ref = this.lastAudioPlayerMedia[serial].mediaReferenceId;
+            return ref === mediaId || ref.endsWith(`:${mediaId}`);
+        });
+        if (matches.length !== 1) return null;
+        return {
+            deviceSerialNumber: matches[0],
+            deviceType: this.lastAudioPlayerMedia[matches[0]].deviceType
+        };
     }
 
     getPushedActivities() {

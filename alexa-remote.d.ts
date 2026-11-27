@@ -270,8 +270,166 @@ declare module "alexa-remote2" {
         nodes: MultiSequenceCommand[];
     };
 
+    /** Fields shared by the push events that refer to one device */
+    export type PushDeviceEvent = {
+        destinationUserId: string;
+        deviceSerialNumber: string;
+        deviceType: string;
+    };
+
+    export type PushDeviceConnectionChangeEvent = PushDeviceEvent & {
+        connectionState: "ONLINE" | "OFFLINE" | string;
+    };
+
+    export type PushBluetoothStateChangeEvent = PushDeviceEvent & {
+        bluetoothEvent: string;
+        bluetoothEventPayload: unknown;
+        bluetoothEventSuccess: boolean;
+    };
+
+    export type PushAudioPlayerStateChangeEvent = PushDeviceEvent & {
+        /** e.g. "EMP_ALEXA-<uuid>:spotify:track:<id>" */
+        mediaReferenceId: string;
+        audioPlayerState: "PLAYING" | "INTERRUPTED" | "FINISHED" | string;
+        quality: unknown | null;
+        error: boolean;
+        errorMessage: string | null;
+    };
+
+    export type PushMediaQueueChangeEvent = PushDeviceEvent & {
+        changeType: "STATUS_CHANGED" | string;
+        playBackOrder: "NORMAL" | "SHUFFLE_ALL" | string;
+        trackOrderChanged: boolean;
+        loopMode: "NORMAL" | "LOOP_QUEUE" | string;
+    };
+
+    export type PushMediaChangeEvent = PushDeviceEvent & {
+        mediaReferenceId: string;
+    };
+
+    export type PushMediaProgressChangeEvent = PushDeviceEvent & {
+        mediaReferenceId: string;
+        mediaProgress: number | null;
+        mediaLength: number | null;
+    };
+
+    export type PushVolumeChangeEvent = PushDeviceEvent & {
+        isMuted: boolean;
+        volume: number;
+    };
+
+    export type PushContentFocusChangeEvent = PushDeviceEvent & {
+        deviceComponent: string;
+    };
+
+    export type PushEqualizerStateChangeEvent = PushDeviceEvent & {
+        bass: number;
+        treble: number;
+        midrange: number;
+    };
+
+    export type PushNotificationChangeEvent = PushDeviceEvent & {
+        eventType: "CREATE" | "UPDATE" | "DELETE" | string;
+        notificationId: string;
+        notificationVersion: number;
+    };
+
+    export type PushTodoChangeEvent = {
+        destinationUserId: string;
+        eventType: "itemCreated" | "itemUpdated" | "itemDeleted" | string;
+        listId: string;
+        listItemVersion: number;
+        listItemId: string;
+    };
+
+    export type NowPlayingData = {
+        "@class"?: string;
+        mediaId?: string;
+        queueId?: string;
+        playerState?: "PLAYING" | "PAUSED" | string;
+        progress?: {
+            visible?: boolean;
+            mediaProgress?: number;
+            mediaLength?: number;
+            allowScrubbing?: boolean;
+            showTiming?: boolean;
+        };
+        transport?: Record<string, "ENABLED" | "DISABLED" | "HIDDEN" | string>;
+        infoText?: {
+            title?: string;
+            subText1?: string;
+            subText2?: string;
+            multiLineMode?: boolean;
+        };
+        mainArt?: {
+            altText?: string | null;
+            contentType?: string | null;
+            tinyUrl?: string;
+            smallUrl?: string;
+            mediumUrl?: string;
+            largeUrl?: string;
+            fullUrl?: string;
+        };
+        provider?: {
+            providerName?: string;
+            providerLogo?: { altText?: string | null; url?: string; contentType?: string | null };
+        };
+        quality?: { name?: string; badge?: { altText?: string | null; url?: string; contentType?: string | null } };
+        mediaReference?: { namespace?: string; name?: string; value?: string };
+        sources?: unknown[];
+        [key: string]: unknown;
+    };
+
+    export type PushNowPlayingUpdatedEvent = {
+        customerId: string | null;
+        /** Derived from the last PUSH_AUDIO_PLAYER_STATE with the same media; null when unknown or ambiguous */
+        deviceSerialNumber: string | null;
+        deviceType: string | null;
+        taskSessionId: string | null;
+        cause: "PLAYBACK_STARTED" | "PLAYBACK_STOPPED" | string | null;
+        mediaId: string | null;
+        playerState: "PLAYING" | "PAUSED" | string | null;
+        nowPlayingData: NowPlayingData | null;
+    };
+
+    export type PushDeviceActivityEvent = {
+        data: unknown;
+        deviceSerialNumber: string;
+        deviceType: string | null;
+        name: string;
+        creationTimestamp: number | null;
+        description: { summary: string; [key: string]: unknown };
+        alexaResponse: string;
+        [key: string]: unknown;
+    };
+
     import {EventEmitter} from 'events';
     export default class AlexaRemote extends EventEmitter {
+        on(event: 'cookie', listener: (cookie: string, csrf: string, macDms: unknown) => void): this;
+        on(event: 'command', listener: (data: { command: string; payload: unknown }) => void): this;
+        on(event: 'ws-connect', listener: () => void): this;
+        on(event: 'ws-disconnect', listener: (willReconnect: boolean, message: string) => void): this;
+        on(event: 'ws-error', listener: (error: Error) => void): this;
+        /** Push message or renderingUpdate that could not be processed (raw object) */
+        on(event: 'ws-unknown-message', listener: (message: unknown) => void): this;
+        /** Push data that could not be parsed (description text) */
+        on(event: 'ws-unexpected-response', listener: (message: string) => void): this;
+        on(event: 'ws-unknown-command', listener: (command: string, payload: unknown) => void): this;
+        on(event: 'ws-device-connection-change', listener: (event: PushDeviceConnectionChangeEvent) => void): this;
+        on(event: 'ws-bluetooth-state-change', listener: (event: PushBluetoothStateChangeEvent) => void): this;
+        on(event: 'ws-audio-player-state-change', listener: (event: PushAudioPlayerStateChangeEvent) => void): this;
+        on(event: 'ws-media-queue-change', listener: (event: PushMediaQueueChangeEvent) => void): this;
+        on(event: 'ws-media-change', listener: (event: PushMediaChangeEvent) => void): this;
+        on(event: 'ws-media-progress-change', listener: (event: PushMediaProgressChangeEvent) => void): this;
+        on(event: 'ws-volume-change', listener: (event: PushVolumeChangeEvent) => void): this;
+        on(event: 'ws-content-focus-change', listener: (event: PushContentFocusChangeEvent) => void): this;
+        on(event: 'ws-equilizer-state-change', listener: (event: PushEqualizerStateChangeEvent) => void): this;
+        on(event: 'ws-notification-change', listener: (event: PushNotificationChangeEvent) => void): this;
+        on(event: 'ws-todo-change', listener: (event: PushTodoChangeEvent) => void): this;
+        on(event: 'ws-now-playing-updated', listener: (event: PushNowPlayingUpdatedEvent) => void): this;
+        on(event: 'ws-device-activity', listener: (event: PushDeviceActivityEvent) => void): this;
+        on(event: string | symbol, listener: (...args: any[]) => void): this;
+
         serialNumbers: Record<string, Serial>;
         cookie?: string;
         csrf?: string;

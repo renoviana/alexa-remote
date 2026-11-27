@@ -44,6 +44,9 @@ Thank you for that work.
 
 ## Changelog:
 ### __WORK IN PROGRESS__
+* "ws-now-playing-updated" now contains deviceSerialNumber and deviceType, derived from the last PUSH_AUDIO_PLAYER_STATE with the same media (null when unknown or ambiguous)
+* "ws-audio-player-state-change" now contains quality
+* Added TypeScript typings for all push events
 * Push connection: messages bigger than one HTTP/2 data chunk (e.g. PUSH_AUDIO_PLAYER_STATE, NotifyNowPlayingUpdated) were dropped, the stream is now buffered and parsed per multipart part, also keeping multi-byte characters intact
 * Push connection: messages without renderingUpdates and broken updates are now emitted as "ws-unknown-message" instead of only being logged, one broken update no longer drops the other updates of the same message, and parse errors are emitted as new "ws-unexpected-response" event
 
