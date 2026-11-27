@@ -33,7 +33,8 @@ alexa.init({
         alexaServiceHost: 'layla.amazon.de', // optional, e.g. "pitangui.amazon.com" for amazon.com, default is "layla.amazon.de"
 //        userAgent: '...', // optional, override used user-Agent for all Requests and Cookie determination
 //        acceptLanguage: '...', // optional, override Accept-Language-Header for cookie determination
-//        amazonPage: '...', // optional, override Amazon-Login-Page for cookie determination and referer for requests
+//        amazonPage: '...', // optional, override Amazon-Login-Page for cookie determination and referer for requests, e.g. 'amazon.com.br' for Brazil
+//        locale: '...', // optional, e.g. 'pt-BR'. Default is derived from amazonPage (amazon.com.br -> pt-BR)
         useWsMqtt: true, // optional, true to use the Websocket/MQTT direct push connection
 //        pushDispatchHost: '...', // optional, override push endpoint host
         cookieRefreshInterval: 7*24*60*1000, // optional, cookie refresh intervall, set to 0 to disable refresh

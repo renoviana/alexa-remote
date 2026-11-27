@@ -12,6 +12,24 @@ const EventEmitter = require('events');
 
 const officialUserAgent = 'AppleWebKit PitanguiBridge/2.2.595606.0-[HARDWARE=iPhone14_7][SOFTWARE=17.4.1][DEVICE=iPhone]';
 
+// Locale and marketplace defaults per Amazon page, used when no explicit "locale" option is given
+const amazonPageSettings = {
+    'amazon.de': { locale: 'de-DE', marketplaceId: 'A1PA6795UKMFR9', country: 'DE' },
+    'amazon.com': { locale: 'en-US', marketplaceId: 'ATVPDKIKX0DER', country: 'US' },
+    'amazon.co.uk': { locale: 'en-GB', marketplaceId: 'A1F83G8C2ARO7P', country: 'GB' },
+    'amazon.ca': { locale: 'en-CA', marketplaceId: 'A2EUQ1WTGCTBG2', country: 'CA' },
+    'amazon.com.au': { locale: 'en-AU', marketplaceId: 'A39IBJ37TRP1C6', country: 'AU' },
+    'amazon.in': { locale: 'en-IN', marketplaceId: 'A21TJRUUN4KGV', country: 'IN' },
+    'amazon.fr': { locale: 'fr-FR', marketplaceId: 'A13V1IB3VIYZZH', country: 'FR' },
+    'amazon.it': { locale: 'it-IT', marketplaceId: 'APJ6JRA9NG5V4', country: 'IT' },
+    'amazon.es': { locale: 'es-ES', marketplaceId: 'A1RKKUPIHCS9HS', country: 'ES' },
+    'amazon.com.mx': { locale: 'es-MX', marketplaceId: 'A1AM78C64UM0Y8', country: 'MX' },
+    'amazon.com.br': { locale: 'pt-BR', marketplaceId: 'A2Q3Y263D00KWC', country: 'BR' },
+    'amazon.co.jp': { locale: 'ja-JP', marketplaceId: 'A1VC38T7YXB528', country: 'JP' },
+    'amazon.nl': { locale: 'nl-NL', marketplaceId: 'A1805IZSGTT6HS', country: 'NL' },
+};
+const defaultAmazonPageSettings = amazonPageSettings['amazon.de'];
+
 function _00(val) {
     let s = val.toString();
     while (s.length < 2) s = `0${s}`;
@@ -168,6 +186,16 @@ class AlexaRemote extends EventEmitter {
         this.emit('cookie', this.cookie, this.csrf, this.macDms);
     }
 
+    getAmazonPageSettings() {
+        const amazonPage = (this._options && this._options.amazonPage) || 'amazon.de';
+        return amazonPageSettings[amazonPage] || defaultAmazonPageSettings;
+    }
+
+    // Locale like "pt-BR": explicit "locale" option, else derived from amazonPage, else "de-DE"
+    getLocale() {
+        return (this._options && this._options.locale) || this.getAmazonPageSettings().locale;
+    }
+
     init(cookie, callback) {
         if (typeof cookie === 'object') {
             this._options = cookie;
@@ -188,12 +216,17 @@ class AlexaRemote extends EventEmitter {
             }
             this._options.amazonPage = this._options.amazonPage || 'amazon.de';
             this.baseUrl = `alexa.${this._options.amazonPage}`;
+            // Defaults for the login flow in alexa-cookie2, which shares this options object
+            const locale = this.getLocale();
+            this._options.acceptLanguage = this._options.acceptLanguage || locale;
+            this._options.amazonPageProxyLanguage = this._options.amazonPageProxyLanguage || locale.replace('-', '_');
 
             cookie = this._options.cookie;
         }
         this._options.logger && this._options.logger(`Alexa-Remote: Use as User-Agent: ${this._options.userAgent}`);
         this._options.logger && this._options.logger(`Alexa-Remote: Use as API User-Agent Postfix: ${this._options.apiUserAgentPostfix}`);
         this._options.logger && this._options.logger(`Alexa-Remote: Use as Login-Amazon-URL: ${this._options.amazonPage}`);
+        this._options.logger && this._options.logger(`Alexa-Remote: Use as Locale: ${this.getLocale()}`);
         if (this._options.alexaServiceHost) this.baseUrl = this._options.alexaServiceHost;
         this._options.logger && this._options.logger(`Alexa-Remote: Use as Base-URL: ${this.baseUrl}`);
         this._options.alexaServiceHost = this.baseUrl;
@@ -1301,7 +1334,7 @@ class AlexaRemote extends EventEmitter {
                 'User-Agent' : `${officialUserAgent} ${this._options.apiUserAgentPostfix}`.trim(),
                 'Content-Type': 'application/json; charset=utf-8',
                 'Accept': 'application/json; charset=utf-8',
-                'Accept-Language': this._options.acceptLanguage || 'de-DE',
+                'Accept-Language': this._options.acceptLanguage || this.getLocale(),
                 'Referer': `https://alexa.${this._options.amazonPage}/spa/index.html`,
                 'Origin': `https://alexa.${this._options.amazonPage}`,
                 'csrf' : this.csrf,
@@ -1889,7 +1922,7 @@ class AlexaRemote extends EventEmitter {
         };
 
         // send request
-        this.httpsGet(`https://skills-store.${this._options.amazonPage}/app/secure/your-skills-page?deviceType=app&ref-suffix=ysa_gw&pfm=A1PA6795UKMFR9&cor=DE&lang=en-us&_=%t`, function (err, res) {
+        this.httpsGet(`https://skills-store.${this._options.amazonPage}/app/secure/your-skills-page?deviceType=app&ref-suffix=ysa_gw&pfm=${this.getAmazonPageSettings().marketplaceId}&cor=${this.getAmazonPageSettings().country}&lang=${this.getLocale().toLowerCase()}&_=%t`, function (err, res) {
             const data = res.find(o => o.block === 'data' && Array.isArray(o.contents))
                 .contents
                 .find(o => o.id === 'skillsPageData')
@@ -2944,7 +2977,7 @@ class AlexaRemote extends EventEmitter {
                 seqNode.operationPayload.expireAfter = 'PT5S';
                 seqNode.operationPayload.content = [
                     {
-                        'locale': 'de-DE',
+                        'locale': this.getLocale(),
                         'display': {
                             'title': 'ioBroker',
                             'body': value.replace(/<[^>]+>/g, '')
@@ -3066,7 +3099,7 @@ class AlexaRemote extends EventEmitter {
             reqObj.sequenceJson = reqObj.sequenceJson.replace(/"deviceSerialNumber":"ALEXA_CURRENT_DSN"/g, `"deviceSerialNumber":"${dev.serialNumber}"`);
             reqObj.sequenceJson = reqObj.sequenceJson.replace(/"customerId":"ALEXA_CUSTOMER_ID"/g, `"customerId":"${dev.deviceOwnerCustomerId}"`);
         }
-        reqObj.sequenceJson = reqObj.sequenceJson.replace(/"locale":"ALEXA_CURRENT_LOCALE"/g, `"locale":"de-DE"`);
+        reqObj.sequenceJson = reqObj.sequenceJson.replace(/"locale":"ALEXA_CURRENT_LOCALE"/g, `"locale":"${this.getLocale()}"`);
 
         this.httpsGet(`/api/behaviors/preview`,
             callback,
@@ -3145,7 +3178,7 @@ class AlexaRemote extends EventEmitter {
         const operationPayload = {
             'deviceType': dev.deviceType,
             'deviceSerialNumber': dev.serialNumber,
-            'locale': 'de-DE', // TODO!!
+            'locale': this.getLocale(),
             'customerId': dev.deviceOwnerCustomerId,
             'musicProviderId': providerId,
             'searchPhrase': searchPhrase
@@ -3189,7 +3222,7 @@ class AlexaRemote extends EventEmitter {
         const operationPayload = {
             'deviceType': dev.deviceType,
             'deviceSerialNumber': dev.serialNumber,
-            'locale': 'de', // TODO!!
+            'locale': this.getLocale().split('-')[0],
             'customerId': dev.deviceOwnerCustomerId,
             'searchPhrase': searchPhrase
         };
@@ -3237,7 +3270,7 @@ class AlexaRemote extends EventEmitter {
         const operationPayload = {
             //'deviceType': dev.deviceType,
             //'deviceSerialNumber': dev.serialNumber,
-            'locale': 'de', // TODO!!
+            'locale': this.getLocale().split('-')[0],
             'customerId': dev.deviceOwnerCustomerId,
             'deviceAccountId': dev.deviceAccountId,
             'searchPhrase': searchPhrase,

@@ -43,6 +43,9 @@ Thank you for that work.
 * docu docu docu (sorry ... will come)
 
 ## Changelog:
+### __WORK IN PROGRESS__
+* Added amazon.com.br and pt-BR support: locale (Accept-Language, sequences, announcements, music, Audible, skills, login proxy language) is now derived from amazonPage or the new "locale" option instead of always "de-DE"
+
 ### 8.1.1 (2026-08-15)
 * (GiacomoCa) Alexa-Cookie fixes for 2FA and redirects during Logins
 
