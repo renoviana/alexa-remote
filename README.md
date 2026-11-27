@@ -43,6 +43,9 @@ Thank you for that work.
 * docu docu docu (sorry ... will come)
 
 ## Changelog:
+### __WORK IN PROGRESS__
+* Push connection: messages without renderingUpdates and broken updates are now emitted as "ws-unknown-message" instead of only being logged, one broken update no longer drops the other updates of the same message, and parse errors are emitted as new "ws-unexpected-response" event
+
 ### 8.1.1 (2026-08-15)
 * (GiacomoCa) Alexa-Cookie fixes for 2FA and redirects during Logins
 

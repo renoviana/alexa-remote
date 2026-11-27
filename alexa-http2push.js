@@ -200,31 +200,30 @@ class AlexaHttp2Push extends EventEmitter {
                             const json_start = chunk.indexOf('{');
                             const json_end = chunk.lastIndexOf('}');
                             if (json_start === -1 || json_end === -1) {
-                                this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected ResponseCould not find json in chunk: ${chunk}`);
+                                this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected Response, could not find json in chunk: ${chunk}`);
+                                this.emit('unexpected-response', `Could not find json in chunk: ${chunk}`);
                                 return;
                             }
                             const message = chunk.substring(json_start, json_end + 1);
+                            let data;
                             try {
-                                const data = JSON.parse(message);
-                                if (!data || !data.directive || !data.directive.payload || !Array.isArray(data.directive.payload.renderingUpdates)) {
-                                    this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected ResponseCould not find renderingUpdates in json: ${message}`);
-                                    return;
-                                }
-                                data.directive.payload.renderingUpdates.forEach(update => {
-                                    if (!update || !update.resourceMetadata) {
-                                        this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected ResponseCould not find resourceMetadata in renderingUpdates: ${message}`);
-                                    }
-                                    const dataContent = JSON.parse(update.resourceMetadata);
-
-                                    const command = dataContent.command;
-                                    const payload = JSON.parse(dataContent.payload);
-
-                                    this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Command ${command}: ${JSON.stringify(payload, null, 4)}`);
-                                    this.emit('command', command, payload);
-                                });
+                                data = JSON.parse(message);
                             } catch (err) {
+                                this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Could not parse json: ${message}: ${err.message}`);
                                 this.emit('unexpected-response', `Could not parse json: ${message}: ${err.message}`);
+                                return;
                             }
+                            if (!data || !data.directive || !data.directive.payload || !Array.isArray(data.directive.payload.renderingUpdates)) {
+                                // Valid JSON but not the known format: hand it out so new message types can be discovered
+                                this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unknown message without renderingUpdates: ${message}`);
+                                this.emit('unknown', data);
+                                return;
+                            }
+                            // Each update is handled on its own, so one broken update does not drop the others
+                            data.directive.payload.renderingUpdates.forEach(update => this.handleRenderingUpdate(update));
+                        } else if (chunk.trim()) {
+                            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected chunk: ${chunk}`);
+                            this.emit('unexpected-response', `Unexpected chunk: ${chunk}`);
                         }
                     });
 
@@ -268,6 +267,35 @@ class AlexaHttp2Push extends EventEmitter {
                 }
             }, 30000);
         });
+    }
+
+    handleRenderingUpdate(update) {
+        let command;
+        let payload;
+        try {
+            if (!update || !update.resourceMetadata) {
+                throw new Error('missing resourceMetadata');
+            }
+            const dataContent = typeof update.resourceMetadata === 'string' ? JSON.parse(update.resourceMetadata) : update.resourceMetadata;
+            if (!dataContent || !dataContent.command) {
+                throw new Error('missing command');
+            }
+            command = dataContent.command;
+            payload = typeof dataContent.payload === 'string' ? JSON.parse(dataContent.payload) : dataContent.payload;
+        } catch (err) {
+            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Could not parse renderingUpdate (${err.message}): ${JSON.stringify(update)}`);
+            this.emit('unknown', update);
+            return;
+        }
+
+        this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Command ${command}: ${JSON.stringify(payload, null, 4)}`);
+        try {
+            this.emit('command', command, payload);
+        } catch (err) {
+            // An exception in a listener must not end up as an uncaught exception in the stream handler
+            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Error while handling command ${command}: ${err.message}`);
+            this.emit('unexpected-response', `Error while handling command ${command}: ${err.message}`);
+        }
     }
 
     disconnect() {

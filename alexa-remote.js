@@ -578,6 +578,9 @@ class AlexaRemote extends EventEmitter {
         this.alexahttp2Push.on('unknown', (incomingMsg) => {
             this.emit('ws-unknown-message', incomingMsg);
         });
+        this.alexahttp2Push.on('unexpected-response', (msg) => {
+            this.emit('ws-unexpected-response', msg);
+        });
         this.alexahttp2Push.on('command', (command, payload) => {
 
             this.emit('command', { 'command': command, 'payload': payload });
