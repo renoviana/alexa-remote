@@ -1,5 +1,10 @@
 const http2 = require('http2');
 const EventEmitter = require('events');
+const { StringDecoder } = require('string_decoder');
+
+// Boundary line of the multipart directives stream, e.g. "--------abcde123" (closing one ends with "--")
+const STREAM_BOUNDARY = /(?:^|\r?\n)--[^\s]*\r?\n/;
+const MAX_STREAM_BUFFER = 1024 * 1024;
 
 class AlexaHttp2Push extends EventEmitter {
 
@@ -163,14 +168,18 @@ class AlexaHttp2Push extends EventEmitter {
                         }
                     });
 
+                    const decoder = new StringDecoder('utf8'); // keeps multi-byte characters split across chunks intact
+                    this.streamBuffer = '';
                     this.stream.on('data', (chunk) => {
                         if (this.stop) {
                             this.stream && this.stream.end();
                             this.client && this.client.close();
                             return;
                         }
-                        chunk = chunk.toString();
-                        if (chunk.startsWith('------')) {
+                        this.handleStreamData(decoder.write(chunk), () => {
+                            if (this.pingPongInterval) {
+                                return;
+                            }
                             this.client.ping(() => onPingResponse(false));
 
                             this.pingPongInterval = setInterval(() => {
@@ -193,38 +202,7 @@ class AlexaHttp2Push extends EventEmitter {
                                     this.connectionActive = false;
                                 }, 30000);
                             }, 180000);
-
-                            return;
-                        }
-                        if (chunk.startsWith('Content-Type: application/json')) {
-                            const json_start = chunk.indexOf('{');
-                            const json_end = chunk.lastIndexOf('}');
-                            if (json_start === -1 || json_end === -1) {
-                                this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected Response, could not find json in chunk: ${chunk}`);
-                                this.emit('unexpected-response', `Could not find json in chunk: ${chunk}`);
-                                return;
-                            }
-                            const message = chunk.substring(json_start, json_end + 1);
-                            let data;
-                            try {
-                                data = JSON.parse(message);
-                            } catch (err) {
-                                this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Could not parse json: ${message}: ${err.message}`);
-                                this.emit('unexpected-response', `Could not parse json: ${message}: ${err.message}`);
-                                return;
-                            }
-                            if (!data || !data.directive || !data.directive.payload || !Array.isArray(data.directive.payload.renderingUpdates)) {
-                                // Valid JSON but not the known format: hand it out so new message types can be discovered
-                                this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unknown message without renderingUpdates: ${message}`);
-                                this.emit('unknown', data);
-                                return;
-                            }
-                            // Each update is handled on its own, so one broken update does not drop the others
-                            data.directive.payload.renderingUpdates.forEach(update => this.handleRenderingUpdate(update));
-                        } else if (chunk.trim()) {
-                            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected chunk: ${chunk}`);
-                            this.emit('unexpected-response', `Unexpected chunk: ${chunk}`);
-                        }
+                        });
                     });
 
                     this.stream.on('close', onHttp2Close);
@@ -267,6 +245,63 @@ class AlexaHttp2Push extends EventEmitter {
                 }
             }, 30000);
         });
+    }
+
+    /**
+     * The directives stream is multipart: parts separated by boundary lines like "--------abcde123".
+     * HTTP/2 data chunks do not match parts, a big message can span several chunks,
+     * so data is buffered and only complete parts (followed by a boundary line) are handled.
+     */
+    handleStreamData(data, onBoundary) {
+        this.streamBuffer = (this.streamBuffer || '') + data;
+        let match;
+        while ((match = STREAM_BOUNDARY.exec(this.streamBuffer))) {
+            const part = this.streamBuffer.substring(0, match.index);
+            this.streamBuffer = this.streamBuffer.substring(match.index + match[0].length);
+            onBoundary && onBoundary();
+            this.handleStreamPart(part);
+        }
+        if (this.streamBuffer.length > MAX_STREAM_BUFFER) {
+            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: No boundary within ${MAX_STREAM_BUFFER} characters, dropping data`);
+            this.emit('unexpected-response', `No boundary within ${MAX_STREAM_BUFFER} characters: ${this.streamBuffer.substring(0, 500)}`);
+            this.streamBuffer = '';
+        }
+    }
+
+    handleStreamPart(part) {
+        part = part.trim();
+        if (!part) {
+            return;
+        }
+        if (!part.startsWith('Content-Type: application/json')) {
+            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected part: ${part}`);
+            this.emit('unexpected-response', `Unexpected part: ${part}`);
+            return;
+        }
+        const json_start = part.indexOf('{');
+        const json_end = part.lastIndexOf('}');
+        if (json_start === -1 || json_end === -1) {
+            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unexpected Response, could not find json in part: ${part}`);
+            this.emit('unexpected-response', `Could not find json in part: ${part}`);
+            return;
+        }
+        const message = part.substring(json_start, json_end + 1);
+        let data;
+        try {
+            data = JSON.parse(message);
+        } catch (err) {
+            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Could not parse json: ${message}: ${err.message}`);
+            this.emit('unexpected-response', `Could not parse json: ${message}: ${err.message}`);
+            return;
+        }
+        if (!data || !data.directive || !data.directive.payload || !Array.isArray(data.directive.payload.renderingUpdates)) {
+            // Valid JSON but not the known format: hand it out so new message types can be discovered
+            this._options.logger && this._options.logger(`Alexa-Remote HTTP2-PUSH: Unknown message without renderingUpdates: ${message}`);
+            this.emit('unknown', data);
+            return;
+        }
+        // Each update is handled on its own, so one broken update does not drop the others
+        data.directive.payload.renderingUpdates.forEach(update => this.handleRenderingUpdate(update));
     }
 
     handleRenderingUpdate(update) {
