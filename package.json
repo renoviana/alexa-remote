@@ -43,7 +43,8 @@
   },
   "scripts": {
     "test": "node node_modules/mocha/bin/mocha",
-    "release": "release-script"
+    "release": "release-script",
+    "capture-push": "node tools/capture-push.js"
   },
   "repository": {
     "type": "git",

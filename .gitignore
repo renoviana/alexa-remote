@@ -86,3 +86,6 @@ $RECYCLE.BIN/
 *.lnk
 
 .idea
+
+# push capture output (contains login data)
+capture/

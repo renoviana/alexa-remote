@@ -7,4 +7,5 @@ node_modules
 package-lock.json
 .gitattributes
 .travis.yml
-appveyor.yml
+appveyor.ymltools/
+capture/
